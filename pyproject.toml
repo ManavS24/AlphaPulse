@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alphapulse"
+version = "0.1.0"
+description = "AlphaPulse — a multi-strategy algorithmic options trading bot for Upstox with backtesting, ML signal filtering, risk management, and a Streamlit dashboard."
+requires-python = ">=3.11"
+dependencies = [
+    "upstox-python-sdk",
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "joblib",
+    "pydantic-settings",
+    "rich",
+    "streamlit",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# DTZ0xx: naive datetimes are intentional for local-market timestamps and synthetic sample data.
+ignore = ["DTZ001", "DTZ005"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

@@ -1,0 +1,11 @@
+# Runtime dependencies for the deployed Streamlit dashboard (Streamlit Community Cloud).
+# The dashboard runs offline and never imports the broker, so upstox-python-sdk is intentionally
+# excluded here to keep the deploy lean. For full local development install via:
+#     pip install -e ".[dev]"
+streamlit
+pandas
+numpy
+scikit-learn==1.9.0
+joblib==1.5.3
+pydantic-settings
+rich

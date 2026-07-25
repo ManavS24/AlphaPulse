@@ -1,0 +1,160 @@
+"""Streamlit dashboard: runs entirely offline on the bundled sample data and trained model.
+
+    streamlit run app/dashboard.py
+"""
+
+import sys
+from pathlib import Path
+
+# Make the package importable whether or not it is pip-installed (e.g. on Streamlit Cloud).
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+import pandas as pd
+import streamlit as st
+
+from alphapulse.data.loader import load_candles_csv
+from alphapulse.engine.backtest import run_backtest
+from alphapulse.risk import RiskParams
+from alphapulse.storage import load_trades, save_trades
+from alphapulse.strategy import STRATEGIES
+from alphapulse.strategy.ml_filter import MLSignalFilter
+
+DATA_PATH = ROOT / "data" / "sample" / "banknifty_5m.csv"
+
+st.set_page_config(page_title="AlphaPulse", page_icon="📈", layout="wide")
+
+
+@st.cache_data
+def _load_candles() -> pd.DataFrame:
+    return load_candles_csv(DATA_PATH)
+
+
+@st.cache_resource
+def _load_filter() -> MLSignalFilter:
+    return MLSignalFilter.load()
+
+
+def _metric_row(metrics: dict) -> None:
+    c = st.columns(4)
+    c[0].metric("Net P&L", f"₹{metrics['net_pnl']:,.0f}")
+    c[1].metric("Win rate", f"{metrics['win_rate_pct']}%")
+    c[2].metric("Total trades", metrics["total_trades"])
+    c[3].metric("Sharpe", metrics["sharpe"])
+    c = st.columns(4)
+    c[0].metric("Total return", f"{metrics['total_return_pct']}%")
+    c[1].metric("Profit factor", metrics["profit_factor"])
+    c[2].metric("Max drawdown", f"{metrics['max_drawdown_pct']}%")
+    c[3].metric("Avg win / loss", f"{metrics['avg_win']:,.0f} / {metrics['avg_loss']:,.0f}")
+
+
+st.title("📈 AlphaPulse")
+st.caption(
+    "Multi-strategy options trading bot (EMA, RSI, MACD, Bollinger) with ML signal filtering, "
+    "risk management, and offline backtesting. Educational project — not financial advice."
+)
+
+candles = _load_candles()
+overview_tab, backtest_tab, strategies_tab, compare_tab, log_tab = st.tabs(
+    ["Overview", "Backtest", "Strategies", "Rule vs ML", "Trade log"]
+)
+
+with overview_tab:
+    st.subheader("How it works")
+    st.markdown(
+        """
+        1. **Market data** — historical / live OHLCV candles.
+        2. **Strategy** — choose EMA crossover, RSI, MACD, or Bollinger Bands; each proposes
+           `buy` / `sell` / `hold`.
+        3. **ML filter** — a logistic-regression model predicts the next candle's direction and
+           vetoes low-confidence signals.
+        4. **Risk management** — stop-loss, take-profit, max trades/day and max daily loss, with
+           intraday square-off.
+        5. **Execution** — live (Upstox, real money) or paper (simulated) via one broker interface.
+        """
+    )
+    st.subheader("Sample underlying price")
+    st.line_chart(candles.set_index("Timestamp")["Close"], height=280)
+    st.caption(f"{len(candles)} candles · {DATA_PATH.name} (synthetic sample data)")
+
+with backtest_tab:
+    st.subheader("Backtest")
+    strategy = st.selectbox("Strategy", sorted(STRATEGIES), index=sorted(STRATEGIES).index("ema"))
+    col1, col2, col3 = st.columns(3)
+    quantity = col1.number_input("Quantity", 1, 500, 15)
+    stop_loss = col2.number_input("Stop loss (₹)", 100, 100_000, 1_000, step=100)
+    take_profit = col3.number_input("Take profit (₹)", 100, 100_000, 2_000, step=100)
+    use_ml = st.toggle("Apply ML signal filter", value=True)
+
+    if st.button("Run backtest", type="primary"):
+        limits = RiskParams(stop_loss=stop_loss, take_profit=take_profit)
+        ml = _load_filter() if use_ml else None
+        result = run_backtest(candles, limits, quantity=quantity, ml_filter=ml, strategy=strategy)
+        st.session_state["last_result"] = result
+
+    result = st.session_state.get("last_result")
+    if result is not None:
+        _metric_row(result.metrics)
+        st.markdown("**Equity curve**")
+        st.line_chart(result.equity_curve.set_index("Timestamp")["Equity"], height=320)
+        if st.button("💾 Save these trades to the log"):
+            n = save_trades(result.trades, source="backtest")
+            st.success(f"Saved {n} trades.")
+    else:
+        st.info("Set parameters and click **Run backtest**.")
+
+with strategies_tab:
+    st.subheader("Strategy comparison")
+    st.caption("All strategies on the same data and risk limits (rule-only, no ML filter).")
+    limits = RiskParams()
+    rows = []
+    for name in sorted(STRATEGIES):
+        m = run_backtest(candles, limits, quantity=15, strategy=name).metrics
+        rows.append({
+            "Strategy": name, "Trades": m["total_trades"], "Win %": m["win_rate_pct"],
+            "Net P&L": m["net_pnl"], "Return %": m["total_return_pct"],
+            "Profit factor": m["profit_factor"], "Max DD %": m["max_drawdown_pct"],
+            "Sharpe": m["sharpe"],
+        })
+    st.dataframe(pd.DataFrame(rows).set_index("Strategy"), use_container_width=True)
+    st.caption("Trend strategies (EMA, MACD) and mean-reversion strategies (RSI, Bollinger) "
+               "behave differently on the same market.")
+
+with compare_tab:
+    st.subheader("Rule-only vs. Rule + ML filter")
+    st.caption("Same data, same risk limits — the ML filter only changes which signals fire.")
+    limits = RiskParams()
+    rule = run_backtest(candles, limits, quantity=15)
+    ml = run_backtest(candles, limits, quantity=15, ml_filter=_load_filter())
+    keys = [
+        ("Total trades", "total_trades"), ("Win rate %", "win_rate_pct"),
+        ("Net P&L", "net_pnl"), ("Total return %", "total_return_pct"),
+        ("Profit factor", "profit_factor"), ("Max drawdown %", "max_drawdown_pct"),
+        ("Sharpe", "sharpe"),
+    ]
+    comparison = pd.DataFrame(
+        {"Rule-only": [rule.metrics[k] for _, k in keys],
+         "Rule + ML": [ml.metrics[k] for _, k in keys]},
+        index=[label for label, _ in keys],
+    )
+    st.dataframe(comparison, use_container_width=True)
+    delta = ml.metrics["net_pnl"] - rule.metrics["net_pnl"]
+    st.metric("ML filter net P&L impact", f"₹{delta:,.0f}", delta=f"{delta:,.0f}")
+
+with log_tab:
+    st.subheader("Trade log (SQLite)")
+    trades = load_trades()
+    if trades.empty:
+        # Auto-seed on a fresh deploy so the log is never empty.
+        seed = run_backtest(candles, RiskParams(), quantity=15, ml_filter=_load_filter())
+        save_trades(seed.trades, source="backtest")
+        trades = load_trades()
+    if trades.empty:
+        st.info("No trades to show.")
+    else:
+        st.caption(f"{len(trades)} trades · net P&L ₹{trades['pnl'].sum():,.0f}")
+        st.dataframe(
+            trades[["source", "entry_time", "direction", "entry_price",
+                    "exit_price", "quantity", "pnl", "exit_reason"]],
+            use_container_width=True, height=460,
+        )
