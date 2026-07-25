@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git ls-remote *)",
+      "Bash(git status *)",
+      "Bash(grep -rInE \"\\(api[_-]?key|secret|password|token\\)\\\\s*[:=]\\\\s*['\\\\\"][A-Za-z0-9_\\\\-]{12,}\" --include=\"*.py\" --include=\"*.toml\" --include=\"*.yaml\" --include=\"*.yml\" --include=\"*.json\" .)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/manavsingla/.claude"
+    ]
+  }
+}
