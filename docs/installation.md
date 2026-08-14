@@ -10,8 +10,8 @@
 
 ```bash
 # 1. Clone
-git clone <your-repo-url>
-cd alphapulse
+git clone https://github.com/ManavS24/AlphaPulse.git
+cd AlphaPulse
 
 # 2. Virtual environment
 python3 -m venv .venv
@@ -24,8 +24,8 @@ pip install -e ".[dev]"
 ## Verify
 
 ```bash
-pytest -q            # all tests should pass
-ruff check src/      # lint should be clean
+pytest -q                        # 54 tests should pass
+ruff check src/ tests/ scripts/ app/   # lint should be clean
 python scripts/run_backtest.py   # runs offline, prints metrics
 ```
 
@@ -49,4 +49,11 @@ Fill in the values in `.env`:
 | `MAX_TRADES_PER_DAY` / `MAX_DAILY_LOSS` | Daily risk caps. |
 | `TRADE_CHECK_INTERVAL` / `MAX_RUNTIME` | Loop interval and session length (seconds). |
 
-`.env` is gitignored — never commit real credentials.
+`.env` is gitignored — never commit real credentials. Every variable above is required *only*
+for live/paper trading; backtesting, the dashboard, and the tests read none of them.
+
+## Optional environment variables
+
+| Variable | Meaning |
+|---|---|
+| `ALPHAPULSE_ROOT` | Override the detected project root used to locate `data/` and `models/`. Rarely needed — the root is found automatically by walking up to `pyproject.toml`/`.git`. |

@@ -18,8 +18,11 @@ venv/
 .ipynb_checkpoints/
 
 # Local runtime artifacts
+# The SQLite trade log is regenerated on demand (the dashboard auto-seeds it).
 data/trades.db
-models/*.pkl
+
+# NOTE: models/signal_model.pkl IS committed on purpose — the deployed dashboard
+# and a fresh clone both need it, and it is only ~2 KB.
 
 # OS
 .DS_Store

@@ -6,11 +6,12 @@ import joblib
 import pandas as pd
 
 from alphapulse.logging_setup import get_logger
+from alphapulse.paths import models_dir
 from alphapulse.strategy.features import latest_feature_row
 
 logger = get_logger(__name__)
 
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[3] / "models" / "signal_model.pkl"
+DEFAULT_MODEL_PATH = models_dir() / "signal_model.pkl"
 
 
 class MLSignalFilter:

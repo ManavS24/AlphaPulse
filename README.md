@@ -4,6 +4,8 @@ A multi-strategy algorithmic options trading bot for the [Upstox](https://upstox
 
 > ⚠️ **Educational project — not financial advice.** Live trading places real orders with real money. Use paper mode and backtesting to explore the system safely.
 
+> **Live demo:** not currently deployed. The dashboard is self-contained and needs no credentials — run it locally with the [Quickstart](#quickstart) below, or deploy your own in ~2 minutes via [docs/deployment.md](docs/deployment.md).
+
 ---
 
 ## Highlights
@@ -12,7 +14,7 @@ A multi-strategy algorithmic options trading bot for the [Upstox](https://upstox
 - **Offline backtester** — evaluate the exact same strategy and risk rules on historical candles with no broker connection. Reports win rate, return, profit factor, max drawdown, and Sharpe.
 - **One interface, three modes** — the same trading loop runs **live** (Upstox), **paper** (simulated fills, real prices), or **backtest** (fully offline).
 - **Risk management** — stop-loss, take-profit, max trades/day, max daily loss, with intraday square-off.
-- **Dashboard** — Streamlit app with an interactive backtest, equity curve, rule-vs-ML comparison, and a SQLite trade log.
+- **Dashboard** — Streamlit app with an interactive backtest, equity curve, a four-strategy comparison, a rule-vs-ML breakdown, and a SQLite trade log.
 
 ## Results (bundled sample data)
 
@@ -27,27 +29,33 @@ The ML filter takes fewer, higher-conviction trades — improving every metric:
 | Max drawdown | 3.20% | **2.93%** |
 | Sharpe | 6.29 | **6.88** |
 
-> These figures use **synthetic sample data** with built-in momentum so the model has a learnable signal (69% accuracy vs. 44.6% baseline). On real market data, expect a smaller edge — see [docs/usage.md](docs/usage.md).
+Reproduce with `python scripts/compare_strategies.py`.
+
+> These figures use **synthetic sample data** with built-in momentum so the model has a learnable signal (69.4% accuracy vs. a 44.6% always-up baseline). On real market data, expect a smaller edge — see [docs/usage.md](docs/usage.md).
 
 ---
 
 ## Quickstart
 
 ```bash
-git clone <your-repo-url> && cd alphapulse
+git clone https://github.com/ManavS24/AlphaPulse.git && cd AlphaPulse
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 1. Generate sample data and train the model (already committed, but reproducible)
-python scripts/generate_sample_data.py
-python scripts/train_model.py
-
-# 2. Backtest offline (no credentials needed)
+# 1. Backtest offline — no credentials, no network
 python scripts/run_backtest.py
 python scripts/compare_strategies.py
 
-# 3. Launch the dashboard
+# 2. Launch the dashboard
 streamlit run app/dashboard.py
+```
+
+The sample candles and the trained model are committed, so all of the above works on a fresh
+clone. To regenerate them from scratch:
+
+```bash
+python scripts/generate_sample_data.py   # rewrites data/sample/banknifty_5m.csv
+python scripts/train_model.py            # rewrites models/signal_model.pkl
 ```
 
 For live/paper trading, copy `.env.example` to `.env` and fill in your Upstox API credentials:
@@ -63,6 +71,7 @@ python scripts/run_live.py    # real orders — use with care
 ```
 src/alphapulse/       # the package
 ├── config.py          # typed settings (pydantic-settings)
+├── paths.py           # project-root / data / model path resolution
 ├── broker/            # Broker interface + Upstox (live) and Paper brokers
 ├── data/              # market data + CSV loader
 ├── strategy/          # EMA/RSI/MACD/Bollinger strategies, indicators, features, ML filter
@@ -71,7 +80,7 @@ src/alphapulse/       # the package
 └── storage/           # SQLite trade log
 app/dashboard.py       # Streamlit dashboard
 scripts/               # backtest, train, compare, seed, run entry points
-tests/                 # pytest suite
+tests/                 # pytest suite (54 tests)
 data/sample/           # committed sample candles
 models/                # committed trained model
 docs/                  # architecture, installation, usage, deployment, demo
@@ -84,6 +93,17 @@ docs/                  # architecture, installation, usage, deployment, demo
 ## Tech stack
 
 Python · pandas · scikit-learn · Streamlit · SQLite · Upstox SDK · pytest · ruff
+
+## Known limitations
+
+- **The bundled data is synthetic.** It is generated with a mild momentum component so the ML
+  model has something learnable. Real intraday markets are far closer to random — the edge shown
+  here would shrink substantially on live data.
+- **Live trading is the least-exercised path.** It requires an interactive Upstox OAuth login and
+  a funded account, so it cannot be covered by the automated tests; the loop is tested against a
+  fake broker instead. The ATM option instrument key is constructed from a strike/expiry
+  convention that should be checked against the current Upstox contract master before real use.
+- **The trade log is ephemeral on Streamlit Cloud** — it resets on redeploy.
 
 ## License
 

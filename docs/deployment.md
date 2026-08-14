@@ -9,7 +9,10 @@ no secrets.
 
 ## Steps
 
-1. Push the repository to GitHub (public).
+1. Push the repository to GitHub (public). Confirm `models/signal_model.pkl` and
+   `data/sample/banknifty_5m.csv` are actually tracked — `git ls-files models data` should list
+   both. Without the model the app still runs, but the ML filter silently disables and the
+   Rule-vs-ML tab shows no difference.
 2. Go to [share.streamlit.io](https://share.streamlit.io/) and sign in with GitHub.
 3. **New app** → select your repo, branch `main`, main file path **`app/dashboard.py`**.
 4. (Optional) **Advanced settings** → Python version `3.11`.
@@ -24,6 +27,13 @@ Streamlit Community Cloud installs from `requirements.txt`. It lists only the pa
 app never touches the broker (it only backtests offline). This keeps the build small and fast. The
 full dependency set (including Upstox) lives in `pyproject.toml` for local development.
 
+Two pins matter there:
+
+- `scikit-learn` and `joblib` are pinned exactly. The committed model is a pickled scikit-learn
+  pipeline, and unpickling is not guaranteed across major versions. If you bump either, retrain
+  with `python scripts/train_model.py` and commit the new model.
+- `streamlit>=1.50` is a floor, required for the `width=` argument used by the dashboard tables.
+
 ## Environment variables & secrets
 
 None are required for the deployed dashboard. If you later add read-only live data, use Streamlit's
@@ -34,7 +44,8 @@ encrypted **Secrets** manager (App → Settings → Secrets) — never commit cr
 - `data/sample/banknifty_5m.csv` and `models/signal_model.pkl` are committed, so the app has
   everything it needs at startup.
 - The SQLite trade log (`data/trades.db`) is **not** committed; the dashboard auto-seeds it from a
-  backtest on first load. Note it is ephemeral — it resets when the app redeploys.
+  baseline backtest on first load, tagging those rows `auto-seed` so they are distinguishable from
+  runs a visitor saves themselves (`backtest`). The log is ephemeral — it resets on redeploy.
 
 ## Cost & maintenance
 

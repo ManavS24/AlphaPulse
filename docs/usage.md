@@ -23,6 +23,7 @@ python scripts/train_model.py --data my_candles.csv
 ```
 
 Reports accuracy, precision, and recall on a time-ordered holdout (no shuffle, so no leakage).
+On the bundled sample data this gives 69.4% accuracy against a 44.6% always-up baseline.
 
 ## Comparing rule-only vs. rule + ML
 
@@ -39,8 +40,17 @@ filter's effect.
 streamlit run app/dashboard.py
 ```
 
-Opens at `http://localhost:8501`. Tabs: **Overview**, **Backtest** (interactive), **Rule vs ML**,
-**Trade log**. Runs fully offline.
+Opens at `http://localhost:8501`. Five tabs:
+
+| Tab | What it shows |
+|---|---|
+| **Overview** | The pipeline end to end, plus the sample price series. |
+| **Backtest** | Interactive run — pick a strategy, quantity, stop-loss, take-profit, and toggle the ML filter. Results are labelled with the settings that produced them. |
+| **Strategies** | All four strategies on identical data and risk limits, side by side. |
+| **Rule vs ML** | The same strategy with and without the ML filter. |
+| **Trade log** | Every persisted trade with its exit reason, read from SQLite. |
+
+Runs fully offline — no credentials, no network.
 
 ## Live and paper trading
 
@@ -54,7 +64,7 @@ Both require a configured `.env` and an interactive Upstox login (you paste the 
 ## A note on the results
 
 The bundled sample data is **synthetic**, generated with a mild momentum component
-(`scripts/generate_sample_data.py`) so the ML model has a learnable signal (~69% accuracy). This
+(`scripts/generate_sample_data.py`) so the ML model has a learnable signal (69.4% accuracy). This
 demonstrates the full pipeline end-to-end.
 
 **Real markets are far closer to random at the 5-minute horizon.** Expect next-candle accuracy

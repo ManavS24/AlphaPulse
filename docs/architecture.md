@@ -12,11 +12,11 @@ flowchart TD
         MD[Market data<br/>Upstox / CSV]
     end
     subgraph Strategy
-        EMA[EMA crossover<br/>signal] --> MLF[ML signal filter<br/>logistic regression]
+        STRAT[Strategy registry<br/>EMA · RSI · MACD · Bollinger] --> MLF[ML signal filter<br/>logistic regression]
     end
     RISK[Risk manager<br/>SL / TP / limits]
 
-    MD --> EMA
+    MD --> STRAT
     MLF --> RISK
 
     RISK -->|live / paper| RUN[Trading loop<br/>runner.py]
@@ -37,6 +37,7 @@ flowchart TD
 | Module | Responsibility |
 |---|---|
 | `config.py` | Typed, validated settings loaded from `.env` (pydantic-settings). |
+| `paths.py` | Locates the project root (and `data/` / `models/`) in both editable and installed layouts. |
 | `broker/base.py` | The `Broker` interface the engine depends on. |
 | `broker/upstox.py` | `UpstoxBroker` — real authentication, orders, and quotes. |
 | `broker/paper.py` | `PaperBroker` — real prices, simulated fills, in-memory positions. |
@@ -63,3 +64,9 @@ flowchart TD
   intraday square-off in the backtest to mirror live daily limits.
 - **Offline-first dashboard** — the dashboard runs on committed sample data and the trained model,
   so it needs no broker connection and can be deployed publicly.
+- **Backtests are cached by their parameters** — the dashboard calls one `@st.cache_data` helper
+  keyed on `(strategy, quantity, stop-loss, take-profit, ML on/off)`, so the comparison tabs are
+  computed once and every later interaction is instant.
+- **Results are pinned to their inputs** — the Backtest tab records the settings that produced the
+  numbers on screen and warns when the controls no longer match, so a stale result can never be
+  misread as belonging to the current settings.

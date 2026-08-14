@@ -1,16 +1,19 @@
 """A minimal SQLite trade log (stdlib sqlite3, single file)."""
 
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from alphapulse.paths import data_dir
+
 if TYPE_CHECKING:
     from alphapulse.engine.backtest import Trade
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "trades.db"
+DEFAULT_DB_PATH = data_dir() / "trades.db"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS trades (
@@ -32,7 +35,7 @@ CREATE TABLE IF NOT EXISTS trades (
 def init_db(path: str | Path = DEFAULT_DB_PATH) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute(_SCHEMA)
 
 
@@ -55,7 +58,7 @@ def save_trades(trades: "list[Trade]", source: str, path: str | Path = DEFAULT_D
         )
         for t in trades
     ]
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.executemany(
             """INSERT INTO trades
                (source, entry_time, entry_price, exit_time, exit_price,
@@ -70,12 +73,12 @@ def load_trades(path: str | Path = DEFAULT_DB_PATH) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         return pd.DataFrame()
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return pd.read_sql_query("SELECT * FROM trades ORDER BY entry_time", conn)
 
 
 def clear_trades(path: str | Path = DEFAULT_DB_PATH) -> None:
     if not Path(path).exists():
         return
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.execute("DELETE FROM trades")

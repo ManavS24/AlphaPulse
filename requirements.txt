@@ -2,10 +2,16 @@
 # The dashboard runs offline and never imports the broker, so upstox-python-sdk is intentionally
 # excluded here to keep the deploy lean. For full local development install via:
 #     pip install -e ".[dev]"
-streamlit
+
+# >=1.50 for the `width=` argument on st.dataframe (replaces the removed use_container_width).
+streamlit>=1.50
 pandas
 numpy
+
+# Pinned: the committed models/signal_model.pkl is a pickled scikit-learn pipeline, and
+# unpickling across major versions is not guaranteed. Retrain the model if you bump these.
 scikit-learn==1.9.0
 joblib==1.5.3
+
 pydantic-settings
 rich

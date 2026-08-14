@@ -22,10 +22,23 @@ from alphapulse.strategy.ml_filter import MLSignalFilter
 
 DATA_PATH = ROOT / "data" / "sample" / "banknifty_5m.csv"
 
+# Defaults shared by the Strategies and Rule-vs-ML tabs so every tab compares like with like.
+BASELINE_QUANTITY = 15
+BASELINE_STOP_LOSS = 1_000.0
+BASELINE_TAKE_PROFIT = 2_000.0
+BASELINE = (BASELINE_QUANTITY, BASELINE_STOP_LOSS, BASELINE_TAKE_PROFIT)
+
+STRATEGY_LABELS = {
+    "ema": "EMA crossover (trend)",
+    "rsi": "RSI (mean reversion)",
+    "macd": "MACD (trend)",
+    "bollinger": "Bollinger Bands (mean reversion)",
+}
+
 st.set_page_config(page_title="AlphaPulse", page_icon="📈", layout="wide")
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def _load_candles() -> pd.DataFrame:
     return load_candles_csv(DATA_PATH)
 
@@ -33,6 +46,26 @@ def _load_candles() -> pd.DataFrame:
 @st.cache_resource
 def _load_filter() -> MLSignalFilter:
     return MLSignalFilter.load()
+
+
+@st.cache_data(show_spinner=False)
+def _run(strategy: str, quantity: int, stop_loss: float, take_profit: float, use_ml: bool):
+    """Cached backtest. Keyed on the parameters, so repeat views are instant."""
+    limits = RiskParams(stop_loss=stop_loss, take_profit=take_profit)
+    ml_filter = _load_filter() if use_ml else None
+    return run_backtest(
+        _load_candles(), limits, quantity=quantity, ml_filter=ml_filter, strategy=strategy
+    )
+
+
+def _settings_caption(strategy: str, quantity: int, stop_loss: float,
+                      take_profit: float, use_ml: bool) -> str:
+    """Human-readable description of the run that produced a set of results."""
+    return (
+        f"{STRATEGY_LABELS.get(strategy, strategy)} · qty {quantity} · "
+        f"SL ₹{stop_loss:,.0f} · TP ₹{take_profit:,.0f} · "
+        f"ML filter {'on' if use_ml else 'off'}"
+    )
 
 
 def _metric_row(metrics: dict) -> None:
@@ -55,6 +88,18 @@ st.caption(
 )
 
 candles = _load_candles()
+ml_ready = _load_filter().enabled
+
+# The ML filter is the project's headline feature; if the model is missing, say so plainly
+# rather than silently passing every signal through and reporting "no effect".
+if not ml_ready:
+    st.warning(
+        "**ML model not found** — the signal filter is inactive, so the ML results below are "
+        "identical to the rule-only results. Run `python scripts/train_model.py` to create "
+        "`models/signal_model.pkl`.",
+        icon="⚠️",
+    )
+
 overview_tab, backtest_tab, strategies_tab, compare_tab, log_tab = st.tabs(
     ["Overview", "Backtest", "Strategies", "Rule vs ML", "Trade log"]
 )
@@ -77,55 +122,98 @@ with overview_tab:
     st.line_chart(candles.set_index("Timestamp")["Close"], height=280)
     st.caption(f"{len(candles)} candles · {DATA_PATH.name} (synthetic sample data)")
 
+    st.info(
+        "**About this demo.** The bundled candles are *synthetic*, generated with a mild momentum "
+        "component so the model has a learnable signal. Real intraday markets are far closer to "
+        "random, so the edge shown here would shrink substantially on live data. This dashboard "
+        "runs fully offline and places no orders.",
+        icon="ℹ️",
+    )
+
 with backtest_tab:
     st.subheader("Backtest")
-    strategy = st.selectbox("Strategy", sorted(STRATEGIES), index=sorted(STRATEGIES).index("ema"))
+    strategy = st.selectbox(
+        "Strategy",
+        sorted(STRATEGIES),
+        index=sorted(STRATEGIES).index("ema"),
+        format_func=lambda name: STRATEGY_LABELS.get(name, name),
+    )
     col1, col2, col3 = st.columns(3)
-    quantity = col1.number_input("Quantity", 1, 500, 15)
-    stop_loss = col2.number_input("Stop loss (₹)", 100, 100_000, 1_000, step=100)
-    take_profit = col3.number_input("Take profit (₹)", 100, 100_000, 2_000, step=100)
-    use_ml = st.toggle("Apply ML signal filter", value=True)
+    quantity = col1.number_input("Quantity", 1, 500, BASELINE_QUANTITY)
+    stop_loss = col2.number_input("Stop loss (₹)", 100, 100_000, int(BASELINE_STOP_LOSS), step=100)
+    take_profit = col3.number_input(
+        "Take profit (₹)", 100, 100_000, int(BASELINE_TAKE_PROFIT), step=100
+    )
+    use_ml = st.toggle("Apply ML signal filter", value=True, disabled=not ml_ready)
+
+    current_params = (strategy, quantity, float(stop_loss), float(take_profit), use_ml)
 
     if st.button("Run backtest", type="primary"):
-        limits = RiskParams(stop_loss=stop_loss, take_profit=take_profit)
-        ml = _load_filter() if use_ml else None
-        result = run_backtest(candles, limits, quantity=quantity, ml_filter=ml, strategy=strategy)
-        st.session_state["last_result"] = result
+        with st.spinner("Running backtest…"):
+            st.session_state["last_result"] = _run(*current_params)
+            st.session_state["last_params"] = current_params
+            st.session_state["saved_params"] = None
 
     result = st.session_state.get("last_result")
-    if result is not None:
+    shown_params = st.session_state.get("last_params")
+
+    if result is not None and shown_params is not None:
+        # Results are pinned to the settings that produced them, so changing a control without
+        # re-running can never make old numbers look like they belong to the new settings.
+        if shown_params != current_params:
+            st.warning(
+                "Settings changed since this backtest ran. The results below are still for "
+                f"**{_settings_caption(*shown_params)}** — click **Run backtest** to update.",
+                icon="⚠️",
+            )
+        st.caption(f"Results for {_settings_caption(*shown_params)}")
         _metric_row(result.metrics)
         st.markdown("**Equity curve**")
         st.line_chart(result.equity_curve.set_index("Timestamp")["Equity"], height=320)
-        if st.button("💾 Save these trades to the log"):
+
+        already_saved = st.session_state.get("saved_params") == shown_params
+        if st.button(
+            "💾 Save these trades to the log",
+            disabled=already_saved or not result.trades,
+            help="Already saved" if already_saved else None,
+        ):
             n = save_trades(result.trades, source="backtest")
-            st.success(f"Saved {n} trades.")
+            st.session_state["saved_params"] = shown_params
+            st.toast(f"Saved {n} trades to the log.", icon="💾")
+            st.rerun()
+        if already_saved:
+            st.caption("These trades are already in the log.")
     else:
         st.info("Set parameters and click **Run backtest**.")
 
 with strategies_tab:
     st.subheader("Strategy comparison")
-    st.caption("All strategies on the same data and risk limits (rule-only, no ML filter).")
-    limits = RiskParams()
+    st.caption(
+        f"All four strategies on the same data and risk limits — qty {BASELINE_QUANTITY}, "
+        f"SL ₹{BASELINE_STOP_LOSS:,.0f}, TP ₹{BASELINE_TAKE_PROFIT:,.0f}, rule-only (no ML filter)."
+    )
     rows = []
     for name in sorted(STRATEGIES):
-        m = run_backtest(candles, limits, quantity=15, strategy=name).metrics
+        m = _run(name, BASELINE_QUANTITY, BASELINE_STOP_LOSS, BASELINE_TAKE_PROFIT, False).metrics
         rows.append({
-            "Strategy": name, "Trades": m["total_trades"], "Win %": m["win_rate_pct"],
-            "Net P&L": m["net_pnl"], "Return %": m["total_return_pct"],
-            "Profit factor": m["profit_factor"], "Max DD %": m["max_drawdown_pct"],
-            "Sharpe": m["sharpe"],
+            "Strategy": STRATEGY_LABELS.get(name, name), "Trades": m["total_trades"],
+            "Win %": m["win_rate_pct"], "Net P&L": m["net_pnl"],
+            "Return %": m["total_return_pct"], "Profit factor": m["profit_factor"],
+            "Max DD %": m["max_drawdown_pct"], "Sharpe": m["sharpe"],
         })
-    st.dataframe(pd.DataFrame(rows).set_index("Strategy"), use_container_width=True)
+    st.dataframe(pd.DataFrame(rows).set_index("Strategy"), width="stretch")
     st.caption("Trend strategies (EMA, MACD) and mean-reversion strategies (RSI, Bollinger) "
                "behave differently on the same market.")
 
 with compare_tab:
     st.subheader("Rule-only vs. Rule + ML filter")
-    st.caption("Same data, same risk limits — the ML filter only changes which signals fire.")
-    limits = RiskParams()
-    rule = run_backtest(candles, limits, quantity=15)
-    ml = run_backtest(candles, limits, quantity=15, ml_filter=_load_filter())
+    st.caption(
+        "Same data, same risk limits — the ML filter only changes which signals fire. "
+        f"EMA crossover, qty {BASELINE_QUANTITY}, SL ₹{BASELINE_STOP_LOSS:,.0f}, "
+        f"TP ₹{BASELINE_TAKE_PROFIT:,.0f}."
+    )
+    rule = _run("ema", *BASELINE, False)
+    ml = _run("ema", *BASELINE, True)
     keys = [
         ("Total trades", "total_trades"), ("Win rate %", "win_rate_pct"),
         ("Net P&L", "net_pnl"), ("Total return %", "total_return_pct"),
@@ -137,24 +225,42 @@ with compare_tab:
          "Rule + ML": [ml.metrics[k] for _, k in keys]},
         index=[label for label, _ in keys],
     )
-    st.dataframe(comparison, use_container_width=True)
+    st.dataframe(comparison, width="stretch")
     delta = ml.metrics["net_pnl"] - rule.metrics["net_pnl"]
     st.metric("ML filter net P&L impact", f"₹{delta:,.0f}", delta=f"{delta:,.0f}")
+    if ml_ready:
+        st.caption(
+            f"The filter took {rule.metrics['total_trades'] - ml.metrics['total_trades']} fewer "
+            "trades by vetoing low-confidence signals."
+        )
 
 with log_tab:
     st.subheader("Trade log (SQLite)")
     trades = load_trades()
+    seeded = False
     if trades.empty:
         # Auto-seed on a fresh deploy so the log is never empty.
-        seed = run_backtest(candles, RiskParams(), quantity=15, ml_filter=_load_filter())
-        save_trades(seed.trades, source="backtest")
+        seed = _run("ema", *BASELINE, ml_ready)
+        save_trades(seed.trades, source="auto-seed")
         trades = load_trades()
+        seeded = True
     if trades.empty:
-        st.info("No trades to show.")
+        st.info("No trades yet. Run a backtest and save it to populate the log.")
     else:
+        if seeded:
+            st.caption(
+                "Populated automatically from a baseline EMA backtest on first load — these rows "
+                "are tagged `auto-seed`. Trades you save from the **Backtest** tab appear as "
+                "`backtest`."
+            )
         st.caption(f"{len(trades)} trades · net P&L ₹{trades['pnl'].sum():,.0f}")
         st.dataframe(
             trades[["source", "entry_time", "direction", "entry_price",
                     "exit_price", "quantity", "pnl", "exit_reason"]],
-            use_container_width=True, height=460,
+            width="stretch", height=460,
+        )
+        st.caption(
+            "Written by the same code path the live and paper runners use. `exit_reason` shows "
+            "which rule closed each position — TAKE_PROFIT, STOP_LOSS, SIGNAL_REVERSE, "
+            "DAY_CLOSE, or a daily risk cap."
         )

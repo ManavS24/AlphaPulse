@@ -1,6 +1,6 @@
 # Demo guide
 
-A 4–5 minute walkthrough for a project evaluation or interview. Everything runs offline, so it
+A 5–6 minute walkthrough for a project evaluation or interview. Everything runs offline, so it
 works with the market closed and needs no live credentials.
 
 ## Before you start
@@ -10,7 +10,8 @@ source .venv/bin/activate
 streamlit run app/dashboard.py
 ```
 
-Have the public Streamlit URL open as a backup in case of local issues, and keep a screen recording
+Everything runs locally with no credentials. If you have also deployed the dashboard
+(see [deployment.md](deployment.md)), keep that URL open as a backup, and keep a screen recording
 of the flow (below) in reserve.
 
 ## Presentation flow
@@ -29,14 +30,18 @@ of the flow (below) in reserve.
    at the equity curve and the metric tiles (win rate, Sharpe, drawdown). Note there is no
    look-ahead — signals use only past candles.
 
-5. **Rule vs ML tab (60s)** — the money slide. The ML filter takes fewer, higher-conviction trades
+5. **Strategies tab (30s)** — all four strategies on identical data and risk limits. Trend
+   strategies (EMA, MACD) and mean-reversion strategies (RSI, Bollinger) behave differently on the
+   same market — evidence the strategy layer is genuinely pluggable, not hardcoded.
+
+6. **Rule vs ML tab (60s)** — the money slide. The ML filter takes fewer, higher-conviction trades
    and improves win rate, profit factor, and Sharpe. Explain: *the model predicts next-candle
    direction and vetoes low-confidence signals.*
 
-6. **Trade log tab (20s)** — every trade persisted to SQLite, with exit reasons (TAKE_PROFIT,
+7. **Trade log tab (20s)** — every trade persisted to SQLite, with exit reasons (TAKE_PROFIT,
    STOP_LOSS, DAY_CLOSE, MAX_TRADES_PER_DAY) that show the risk rules firing.
 
-7. **Honesty + future work (30s)** — the sample data is synthetic with built-in momentum; real
+8. **Honesty + future work (30s)** — the sample data is synthetic with built-in momentum; real
    markets are near-random intraday, so the edge would shrink. Future work: real historical data,
    more strategies, richer features.
 
@@ -49,4 +54,6 @@ of the flow (below) in reserve.
 ## Fallback if anything fails
 
 The demo has no external dependencies at runtime, so an API outage or closed market changes nothing.
-If the local app misbehaves, switch to the deployed Streamlit URL; if that fails, play the recording.
+If the local app misbehaves, switch to your deployed Streamlit URL if you have one; failing that,
+play the recording. `python scripts/compare_strategies.py` reproduces the headline result in the
+terminal in about two seconds and makes a reliable last resort.
