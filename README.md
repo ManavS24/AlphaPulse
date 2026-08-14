@@ -4,7 +4,7 @@ A multi-strategy algorithmic options trading bot for the [Upstox](https://upstox
 
 > ⚠️ **Educational project — not financial advice.** Live trading places real orders with real money. Use paper mode and backtesting to explore the system safely.
 
-> **Live demo:** not currently deployed. The dashboard is self-contained and needs no credentials — run it locally with the [Quickstart](#quickstart) below, or deploy your own in ~2 minutes via [docs/deployment.md](docs/deployment.md).
+> **Live demo:** a hosted instance runs on Streamlit Community Cloud with access restricted — available on request. The dashboard is fully self-contained and needs no credentials, so the fastest way to try it is the [Quickstart](#quickstart) below (about 30 seconds), or deploy your own via [docs/deployment.md](docs/deployment.md).
 
 ---
 
